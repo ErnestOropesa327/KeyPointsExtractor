@@ -169,9 +169,15 @@ class PDFAnalyzer:
             return
 
         keywords = keywords_str.split(',')
+        text = self.text_box.get("1.0", "end-1c").lower()
+           
         for keyword in keywords:
             keyword = keyword.strip()
             if keyword:
+                if keyword.lower() not in text:
+                    messagebox.showerror("Error", f"The word '{keyword}' doesn't exist.")
+                    continue
+                    
                 start_pos = "1.0"
                 while True:
                     start_pos = self.text_box.search(keyword, start_pos, stopindex=tk.END)
