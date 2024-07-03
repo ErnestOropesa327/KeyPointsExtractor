@@ -1,15 +1,29 @@
 import tkinter as tk
-from tkinter import filedialog, messagebox, Text, Scrollbar, messagebox
-import fitz  # PyMuPDF
+from tkinter import filedialog, Text, Scrollbar, messagebox
 from PyPDF2 import PdfReader
 import nltk
 from nltk.tokenize import sent_tokenize
 from nltk.corpus import stopwords
 from nltk.probability import FreqDist
-import os
 
 nltk.download('punkt')
 nltk.download('stopwords')
+
+def pdf_to_text(pdf_path):
+    """
+    Convert a PDF file to text.
+
+    Args:
+    pdf_path (str): The path to the PDF file to be converted.
+
+    Returns:
+    str: The extracted text from the PDF.
+    """
+    reader = PdfReader(pdf_path)
+    text = ""
+    for page in reader.pages:
+        text += page.extract_text()
+    return text
 
 class PDFAnalyzer:
     def __init__(self, root):
@@ -72,7 +86,7 @@ class PDFAnalyzer:
         self.summarize_button = tk.Button(self.button_frame, text="Summarize Text", command=self.summarize_text)
         self.summarize_button.pack(fill='x', pady=5)
 
-        self.highlight_button = tk.Button(self.button_frame, text="Highlight Text", command=self.highlight_text)
+        self.highlight_button = tk.Button(self.button_frame, text="Highlight Text", command=self.highlight_keywords)
         self.highlight_button.pack(fill='x', pady=5)
 
         self.keypoints_button = tk.Button(self.button_frame, text="Find Key Points", command=self.find_keypoints)
@@ -81,9 +95,21 @@ class PDFAnalyzer:
         self.back_button = tk.Button(self.button_frame, text="Back to Main Menu", command=self.back_to_main_menu)
         self.back_button.pack(fill='x', pady=5)
 
-        # Text field box at the bottom
-        self.bottom_text_box = Text(self.root, wrap='word', height=5)
-        self.bottom_text_box.pack(pady=10, padx=10, fill='x')
+        # Frame for user input and clear buttons
+        self.bottom_frame = tk.Frame(self.root)
+        self.bottom_frame.pack(pady=10, padx=10, fill='x')
+
+        # Text field box for keywords input
+        self.bottom_text_box = Text(self.bottom_frame, wrap='word', height=5)
+        self.bottom_text_box.pack(side=tk.LEFT, padx=5)
+
+        # Clear button for bottom_text_box
+        self.clear_query_button = tk.Button(self.bottom_frame, text="Clear Query", command=self.clear_query)
+        self.clear_query_button.pack(side=tk.LEFT, padx=5)
+
+        # Clear button for text_box
+        self.clear_text_button = tk.Button(self.bottom_frame, text="Clear Text", command=self.clear_text)
+        self.clear_text_button.pack(side=tk.LEFT, padx=5)
 
         self.frame.grid_columnconfigure(0, weight=1)
         self.frame.grid_columnconfigure(2, weight=1)
@@ -93,7 +119,9 @@ class PDFAnalyzer:
 
     def back_to_main_menu(self):
         self.frame.pack_forget()
-        self.bottom_text_box.pack_forget()
+        self.bottom_frame.pack_forget()
+        self.clear_query_button.pack_forget()
+        self.clear_text_button.pack_forget()
         self.main_menu.pack(pady=20, padx=20)
         self.root.title("KeyPoints Extractor")
 
@@ -102,10 +130,10 @@ class PDFAnalyzer:
             "PDF Text Analyzer Help:\n\n"
             "- Start Analyzer: Opens the PDF analyzer interface.\n"
             "- Upload PDF: Select a PDF file to analyze.\n"
-            "- Delete PDF: Removes the uploaded PDF file from the GUI.\n"
-            "- Summarize Text: Provides a summary of the PDF content.\n"
-            "- Highlight Text: Highlights important words in the PDF.\n"
-            "- Find Key Points: Displays the most common words in the PDF."
+            "- Delete PDF: Removes the uploaded PDF file.\n"
+            "- Summarize Text: Provides a summary of the PDF content or entered text.\n"
+            "- Highlight Text: Highlights important words in the PDF or entered text.\n"
+            "- Find Key Points: Displays the most common words in the PDF or entered text."
         )
         messagebox.showinfo("Help", help_text)
 
@@ -124,21 +152,16 @@ class PDFAnalyzer:
             self.text_box.delete(1.0, tk.END)
             messagebox.showinfo("Success", "PDF file deleted.")
         else:
-            print("No file to clear.")
             messagebox.showerror("Error", "No PDF file to delete.")
 
     def extract_text(self):
-        if not self.file_path:
-            messagebox.showerror("Error", "Please upload a PDF file first.")
-            return None
-        reader = PdfReader(self.file_path)
-        text = ""
-        for page in reader.pages:
-            text += page.extract_text()
-        return text
+        if self.file_path:
+            return pdf_to_text(self.file_path)
+        else:
+            return self.preview_text.get("1.0", tk.END)
 
     def summarize_text(self):
-        text = self.extract_text()
+        text = self.extract_text().strip()
         if text:
             sentences = sent_tokenize(text)
             word_frequencies = FreqDist(nltk.word_tokenize(text.lower()))
@@ -159,37 +182,38 @@ class PDFAnalyzer:
             self.text_box.delete(1.0, tk.END)
             self.text_box.insert(tk.END, summary)
 
-       def highlight_keywords(self):
-        """
-        Highlight specified keywords in the text widget based on user input.
-        """
+    def highlight_keywords(self):
         keywords_str = self.bottom_text_box.get("1.0", "end-1c").strip()
         if not keywords_str:
             messagebox.showerror("Error", "Please enter keywords to highlight.")
             return
 
         keywords = keywords_str.split(',')
-        text = self.text_box.get("1.0", "end-1c").lower()
-           
+        text = self.text_box.get("1.0", tk.END)  # Get text from text_box
+
         for keyword in keywords:
             keyword = keyword.strip()
             if keyword:
-                if keyword.lower() not in text:
+                keyword_lower = keyword.lower()
+                keyword_upper = keyword.upper()
+                text_lower = text.lower()  # Convert entire text to lowercase
+
+                # Check if either lowercase or uppercase version of keyword exists in text_lower
+                if keyword_lower in text_lower or keyword_upper in text_lower:
+                    start_pos = "1.0"
+                    while True:
+                        start_pos = self.text_box.search(keyword_lower, start_pos, stopindex=tk.END, nocase=1)
+                        if not start_pos:
+                            break
+                        end_pos = f"{start_pos}+{len(keyword_lower)}c"
+                        self.text_box.tag_add(keyword, start_pos, end_pos)
+                        self.text_box.tag_config(keyword, background="yellow")
+                        start_pos = end_pos
+                else:
                     messagebox.showerror("Error", f"The word '{keyword}' doesn't exist.")
-                    continue
-                    
-                start_pos = "1.0"
-                while True:
-                    start_pos = self.text_box.search(keyword, start_pos, stopindex=tk.END)
-                    if not start_pos:
-                        break
-                    end_pos = f"{start_pos}+{len(keyword)}c"
-                    self.text_box.tag_add(keyword, start_pos, end_pos)
-                    self.text_box.tag_config(keyword, background="yellow")
-                    start_pos = end_pos
 
     def find_keypoints(self):
-        text = self.extract_text()
+        text = self.extract_text().strip()
         if text:
             words = nltk.word_tokenize(text.lower())
             filtered_words = [word for word in words if word.isalnum()]
@@ -198,6 +222,12 @@ class PDFAnalyzer:
             self.text_box.delete(1.0, tk.END)
             for point in keypoints:
                 self.text_box.insert(tk.END, f"{point[0]}: {point[1]}\n")
+
+    def clear_query(self):
+        self.bottom_text_box.delete("1.0", tk.END)
+
+    def clear_text(self):
+        self.text_box.delete("1.0", tk.END)
 
 if __name__ == "__main__":
     root = tk.Tk()
