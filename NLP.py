@@ -146,13 +146,10 @@ class PDFAnalyzer:
                 self.preview_text.insert(tk.END, text)
 
     def delete_pdf(self):
-        if self.file_path:
-            self.file_path = None
-            self.preview_text.delete(1.0, tk.END)
-            self.text_box.delete(1.0, tk.END)
-            messagebox.showinfo("Success", "PDF file deleted.")
-        else:
-            messagebox.showerror("Error", "No PDF file to delete.")
+        self.file_path = None
+        self.preview_text.delete(1.0, tk.END)
+        self.text_box.delete(1.0, tk.END)
+        messagebox.showinfo("Success", "PDF file and input text deleted.")
 
     def extract_text(self):
         if self.file_path:
@@ -188,46 +185,74 @@ class PDFAnalyzer:
             messagebox.showerror("Error", "Please enter keywords to highlight.")
             return
 
-        keywords = keywords_str.split(',')
-        text = self.text_box.get("1.0", tk.END)  # Get text from text_box
+        keywords = [keyword.strip() for keyword in keywords_str.split(',') if keyword.strip()]
+        if not keywords:
+            messagebox.showerror("Error", "Please enter valid keywords to highlight.")
+            return
 
+        # Check right text field first
+        text = self.text_box.get("1.0", tk.END).strip()
+        if text:
+            highlighted = self.highlight_text_in_box(text, keywords, self.text_box)
+            if highlighted:
+                return
+
+        # If not found in the right text field, check the left text field
+        text = self.preview_text.get("1.0", tk.END).strip()
+        if text:
+            self.text_box.delete(1.0, tk.END)  # Clear right text field
+            self.text_box.insert(tk.END, text)  # Insert left field text into right field
+            highlighted = self.highlight_text_in_box(text, keywords, self.text_box)
+            if highlighted:
+                return
+
+        # If not found in either text field
+        messagebox.showerror("Error", "The word(s) do not exist.")
+
+    def highlight_text_in_box(self, text, keywords, text_box):
+        """
+        Highlight the keywords in the given text box.
+
+        Args:
+        text (str): The text to search in.
+        keywords (list of str): The keywords to highlight.
+        text_box (tk.Text): The text box to apply highlights.
+
+        Returns:
+        bool: True if at least one keyword is highlighted, False otherwise.
+        """
+        found = False
         for keyword in keywords:
-            keyword = keyword.strip()
-            if keyword:
-                keyword_lower = keyword.lower()
-                keyword_upper = keyword.upper()
-                text_lower = text.lower()  # Convert entire text to lowercase
-
-                # Check if either lowercase or uppercase version of keyword exists in text_lower
-                if keyword_lower in text_lower or keyword_upper in text_lower:
-                    start_pos = "1.0"
-                    while True:
-                        start_pos = self.text_box.search(keyword_lower, start_pos, stopindex=tk.END, nocase=1)
-                        if not start_pos:
-                            break
-                        end_pos = f"{start_pos}+{len(keyword_lower)}c"
-                        self.text_box.tag_add(keyword, start_pos, end_pos)
-                        self.text_box.tag_config(keyword, background="yellow")
-                        start_pos = end_pos
-                else:
-                    messagebox.showerror("Error", f"The word '{keyword}' doesn't exist.")
+            start_pos = "1.0"
+            while True:
+                start_pos = text_box.search(keyword, start_pos, stopindex=tk.END, nocase=1)
+                if not start_pos:
+                    break
+                end_pos = f"{start_pos}+{len(keyword)}c"
+                text_box.tag_add(keyword, start_pos, end_pos)
+                text_box.tag_config(keyword, background="yellow")
+                start_pos = end_pos
+                found = True
+        return found
 
     def find_keypoints(self):
         text = self.extract_text().strip()
         if text:
             words = nltk.word_tokenize(text.lower())
-            filtered_words = [word for word in words if word.isalnum()]
-            fdist = FreqDist(filtered_words)
-            keypoints = fdist.most_common(10)
+            words = [word for word in words if word.isalnum()]
+            stop_words = set(stopwords.words('english'))
+            words = [word for word in words if word not in stop_words]
+            freq_dist = FreqDist(words)
+            most_common_words = freq_dist.most_common(10)
+            keypoints = ', '.join([word for word, _ in most_common_words])
             self.text_box.delete(1.0, tk.END)
-            for point in keypoints:
-                self.text_box.insert(tk.END, f"{point[0]}: {point[1]}\n")
+            self.text_box.insert(tk.END, keypoints)
 
     def clear_query(self):
-        self.bottom_text_box.delete("1.0", tk.END)
+        self.bottom_text_box.delete(1.0, tk.END)
 
     def clear_text(self):
-        self.text_box.delete("1.0", tk.END)
+        self.text_box.delete(1.0, tk.END)
 
 if __name__ == "__main__":
     root = tk.Tk()
