@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import filedialog, messagebox, Text, Scrollbar
+from tkinter import filedialog, messagebox, Text, Scrollbar, messagebox
 import fitz  # PyMuPDF
 from PyPDF2 import PdfReader
 import nltk
@@ -159,23 +159,28 @@ class PDFAnalyzer:
             self.text_box.delete(1.0, tk.END)
             self.text_box.insert(tk.END, summary)
 
-    def highlight_text(self):
-        text = self.extract_text()
-        if text:
-            self.text_box.delete(1.0, tk.END)
-            self.text_box.insert(tk.END, text)
-            for word in set(nltk.word_tokenize(text.lower())):
-                if word in stopwords.words('english'):
-                    continue
-                start_index = '1.0'
+       def highlight_keywords(self):
+        """
+        Highlight specified keywords in the text widget based on user input.
+        """
+        keywords_str = self.bottom_text_box.get("1.0", "end-1c").strip()
+        if not keywords_str:
+            messagebox.showerror("Error", "Please enter keywords to highlight.")
+            return
+
+        keywords = keywords_str.split(',')
+        for keyword in keywords:
+            keyword = keyword.strip()
+            if keyword:
+                start_pos = "1.0"
                 while True:
-                    start_index = self.text_box.search(word, start_index, stopindex=tk.END)
-                    if not start_index:
+                    start_pos = self.text_box.search(keyword, start_pos, stopindex=tk.END)
+                    if not start_pos:
                         break
-                    end_index = f"{start_index}+{len(word)}c"
-                    self.text_box.tag_add("highlight", start_index, end_index)
-                    self.text_box.tag_config("highlight", background="yellow")
-                    start_index = end_index
+                    end_pos = f"{start_pos}+{len(keyword)}c"
+                    self.text_box.tag_add(keyword, start_pos, end_pos)
+                    self.text_box.tag_config(keyword, background="yellow")
+                    start_pos = end_pos
 
     def find_keypoints(self):
         text = self.extract_text()
