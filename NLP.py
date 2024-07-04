@@ -54,53 +54,96 @@ class PDFAnalyzer:
     def __init__(self, root):
         self.root = root
         self.root.title("KeyPoints Extractor")
-        self.file_path = None
 
+        # Main menu
         self.main_menu = tk.Frame(root)
         self.main_menu.pack(pady=20, padx=20)
+
+        # Header title
         self.header_label = tk.Label(self.main_menu, text="KeyPoints Extractor", font=("Arial", 16, "bold"))
         self.header_label.pack(pady=10)
+
+        # Button frame for alignment
         self.button_frame = tk.Frame(self.main_menu)
         self.button_frame.pack()
 
         self.start_button = tk.Button(self.button_frame, text="Start Analyzer", command=self.start_analyzer, width=20)
         self.start_button.pack(pady=5)
+
         self.help_button = tk.Button(self.button_frame, text="Help", command=self.show_help, width=20)
         self.help_button.pack(pady=5)
+
         self.close_button = tk.Button(self.button_frame, text="Close Program", command=root.quit, width=20)
         self.close_button.pack(pady=5)
 
     def start_analyzer(self):
         self.main_menu.pack_forget()
         self.root.title("KeyPoints Extractor - Analyzer")
+
+        # Frame for PDF preview and controls
         self.frame = tk.Frame(self.root)
         self.frame.pack(pady=10, padx=10, fill='both', expand=True)
+
+        # PDF preview on the left
         self.preview_text = Text(self.frame, wrap='word', height=20, width=40)
         self.preview_text.grid(row=0, column=0, padx=5, pady=5, sticky='nsew')
+
+        # Scrollbar for the preview
         self.scrollbar = Scrollbar(self.frame, command=self.preview_text.yview)
         self.scrollbar.grid(row=0, column=1, sticky='ns')
         self.preview_text.config(yscrollcommand=self.scrollbar.set)
+
+        # Text box for output in the center
         self.text_box = Text(self.frame, wrap='word', height=20, width=60)
         self.text_box.grid(row=0, column=2, padx=5, pady=5, sticky='nsew')
+
+        # Frame for buttons on the right
         self.button_frame = tk.Frame(self.frame)
         self.button_frame.grid(row=0, column=3, padx=5, pady=5, sticky='ns')
+
+        # Buttons for functionalities
         self.upload_button = tk.Button(self.button_frame, text="Upload PDF", command=self.upload_pdf)
         self.upload_button.pack(fill='x', pady=5)
+
         self.delete_button = tk.Button(self.button_frame, text="Delete PDF", command=self.delete_pdf)
         self.delete_button.pack(fill='x', pady=5)
+
         self.summarize_button = tk.Button(self.button_frame, text="Summarize Text", command=self.summarize_text)
         self.summarize_button.pack(fill='x', pady=5)
+
         self.highlight_button = tk.Button(self.button_frame, text="Highlight Text", command=self.highlight_keywords)
         self.highlight_button.pack(fill='x', pady=5)
+
         self.keypoints_button = tk.Button(self.button_frame, text="Find Key Points", command=self.find_keypoints)
         self.keypoints_button.pack(fill='x', pady=5)
+
         self.back_button = tk.Button(self.button_frame, text="Back to Main Menu", command=self.back_to_main_menu)
         self.back_button.pack(fill='x', pady=5)
-        self.bottom_text_box = Text(self.root, wrap='word', height=5)
-        self.bottom_text_box.pack(pady=10, padx=10, fill='x')
+
+        # Frame for user input and clear buttons
+        self.bottom_frame = tk.Frame(self.root)
+        self.bottom_frame.pack(pady=10, padx=10, fill='x')
+
+        # Label and Text field box for keywords input
+        self.bottom_label = tk.Label(self.bottom_frame, text="Enter keywords (comma-separated):")
+        self.bottom_label.pack(side=tk.LEFT, padx=5)
+        self.bottom_text_box = Text(self.bottom_frame, wrap='word', height=1)
+        self.bottom_text_box.pack(side=tk.LEFT, padx=5)
+
+        # Clear button for bottom_text_box
+        self.clear_query_button = tk.Button(self.bottom_frame, text="Clear Query", command=self.clear_query)
+        self.clear_query_button.pack(side=tk.LEFT, padx=5)
+
+        # Clear button for text_box
+        self.clear_text_button = tk.Button(self.bottom_frame, text="Clear Text", command=self.clear_text)
+        self.clear_text_button.pack(side=tk.LEFT, padx=5)
+
         self.frame.grid_columnconfigure(0, weight=1)
         self.frame.grid_columnconfigure(2, weight=1)
         self.frame.grid_rowconfigure(0, weight=1)
+
+        self.file_path = None
+
 
     def back_to_main_menu(self):
         self.frame.pack_forget()
@@ -171,19 +214,62 @@ class PDFAnalyzer:
             messagebox.showerror("Error", "Please enter keywords to highlight.")
             return
 
-        keywords = keywords_str.split(',')
+        keywords = [keyword.strip() for keyword in keywords_str.split(',') if keyword.strip()]
+        if not keywords:
+            messagebox.showerror("Error", "Please enter valid keywords to highlight.")
+            return
+
+        found_keywords = []
+        not_found_keywords = []
+
+        # Check right text field first
+        text = self.text_box.get("1.0", tk.END).strip()
+        if text:
+            found_in_summary = self.highlight_text_in_box(text, keywords, self.text_box, found_keywords)
+            if not found_in_summary:
+                not_found_keywords.extend([keyword for keyword in keywords if keyword not in found_keywords])
+
+        # If not found in the right text field, check the left text field
+        if not found_keywords:
+            text = self.preview_text.get("1.0", tk.END).strip()
+            if text:
+                self.text_box.delete(1.0, tk.END)  # Clear right text field
+                self.text_box.insert(tk.END, text)  # Insert left field text into right field
+                found_in_preview = self.highlight_text_in_box(text, keywords, self.text_box, found_keywords)
+                if not found_in_preview:
+                    not_found_keywords.extend([keyword for keyword in keywords if keyword not in found_keywords])
+
+        # If no keywords were found
+        if not found_keywords:
+            messagebox.showinfo("Not Found", f"The word(s) '{', '.join(not_found_keywords)}' do not exist.")
+
+    def highlight_text_in_box(self, text, keywords, text_box, found_keywords):
+        """
+        Highlight the keywords in the given text box.
+
+        Args:
+        text (str): The text to search in.
+        keywords (list of str): The keywords to highlight.
+        text_box (tk.Text): The text box to apply highlights.
+        found_keywords (list of str): List to collect found keywords.
+
+        Returns:
+        bool: True if at least one keyword is highlighted, False otherwise.
+        """
+        found = False
         for keyword in keywords:
-            keyword = keyword.strip()
-            if keyword:
-                start_pos = "1.0"
-                while True:
-                    start_pos = self.text_box.search(keyword, start_pos, stopindex=tk.END)
-                    if not start_pos:
-                        break
-                    end_pos = f"{start_pos}+{len(keyword)}c"
-                    self.text_box.tag_add(keyword, start_pos, end_pos)
-                    self.text_box.tag_config(keyword, background="yellow")
-                    start_pos = end_pos
+            start_pos = "1.0"
+            while True:
+                start_pos = text_box.search(keyword, start_pos, stopindex=tk.END, nocase=1)
+                if not start_pos:
+                    break
+                end_pos = f"{start_pos}+{len(keyword)}c"
+                text_box.tag_add(keyword, start_pos, end_pos)
+                text_box.tag_config(keyword, background="yellow")
+                start_pos = end_pos
+                found = True
+                found_keywords.append(keyword)
+        return found
 
     def find_keypoints(self):
         threading.Thread(target=self.run_find_keypoints).start()
@@ -200,6 +286,12 @@ class PDFAnalyzer:
             self.text_box.insert(tk.END, ', '.join(keywords))
         except ValueError as e:
             messagebox.showerror("Error", str(e))
+    
+    def clear_query(self):
+        self.bottom_text_box.delete(1.0, tk.END)
+
+    def clear_text(self):
+        self.text_box.delete(1.0, tk.END)
 
 if __name__ == "__main__":
     root = tk.Tk()
